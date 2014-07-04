@@ -6,6 +6,10 @@ via email. All this is configurable.
 It can be run manually, but its main purpose is to be run via cronjob/windows
 scheduler.
 
+NOTE:
+  This branch utilizes linux specific behavior. Namely the install/uninstall
+  process works on linux crontab.
+
 ## How to use
 * If you don’t already have it, download and install
   [the latest python 2.7](http://www.python.org/getit/).
@@ -15,7 +19,8 @@ scheduler.
   edit its contents. You need to at least configure `snapraid.exectable` and
   `snapraid.config`.
 * Run the script via `python snapraid-runner.py`.
-
+* To set cronjob on linux, `python snapraid-runner.py --install`
+    `--uninstall` can be used to disable the cronjob
 ## Features
 * Runs `diff` before `sync` to see how many files were deleted and aborts if
   that number exceeds a set threshold.

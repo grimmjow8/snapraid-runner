@@ -19,7 +19,7 @@ email_log = None
 
 def tee_log(infile, out_lines, log_level):
     """
-    Create a thread thot saves all the output on infile to out_lines and
+    Create a thread that saves all the output on infile to out_lines and
     logs every line with log_level
     """
     def tee_thread():
@@ -63,6 +63,24 @@ def snapraid_command(command, args={}):
     else:
         raise subprocess.CalledProcessError(ret, "snapraid " + command)
 
+def execute_command(command, args={}, display=False):
+    p = subprocess.Popen([command] + args,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+    out = []
+    if ( display ):
+        threads = [
+            tee_log(p.stdout, out, logging.OUTPUT),
+            tee_log(p.stderr, [], logging.OUTERR)]
+        for t in threads:
+            t.join()
+    else:
+        (out,err) = p.communicate()
+        out = out.splitlines()
+    ret = p.wait()
+    time.sleep(0.3)
+    if ret == 0:
+        return out
+    else:
+        raise subprocess.CalledProcessError(ret, command)
 
 def send_email(success):
     import smtplib
@@ -118,7 +136,7 @@ def load_config(args):
     global config
     parser = ConfigParser.RawConfigParser()
     parser.read(args.conf)
-    sections = ["snapraid", "logging", "email", "smtp", "scrub"]
+    sections = ["snapraid", "logging", "email", "smtp", "scrub", "install", "uninstall"]
     config = dict((x, defaultdict(lambda: "")) for x in sections)
     for section in parser.sections():
         for (k, v) in parser.items(section):
@@ -141,6 +159,11 @@ def load_config(args):
     if args.scrub is not None:
         config["scrub"]["enabled"] = args.scrub
 
+    if args.install is not None:
+        config["install"]["enabled"] = args.install
+
+    if args.uninstall is not None:
+        config["uninstall"]["enabled"] = args.uninstall
 
 def setup_logger():
     log_format = logging.Formatter(
@@ -184,6 +207,12 @@ def main():
     parser.add_argument("--no-scrub", action='store_false',
                         dest='scrub', default=None,
                         help="Do not scrub (overrides config)")
+    parser.add_argument("--install", action='store_true',
+                        dest='install', default=None,
+                        help="Install script to crontab")
+    parser.add_argument("--uninstall", action='store_true',
+                        dest='uninstall', default=None,
+                        help="Remove script from crontab")
     args = parser.parse_args()
 
     if not os.path.exists(args.conf):
@@ -206,17 +235,65 @@ def main():
         sys.exit(2)
 
     try:
-        run()
+        init()
     except Exception:
-        logging.exception("Run failed due to unexpected exception:")
+        logging.exception("init failed due to unexpected exception:")
         finish(False)
 
-
-def run():
+def install():
     logging.info("=" * 60)
-    logging.info("Run started")
+    logging.info("Starting install process...")
+    logging.info("=" * 60)
+    logging.info("Loading current crontab contents")
+    out = execute_command("crontab",["-l"])
+    runnerFile = os.path.basename(__file__)
+    runnerFilePath = os.path.realpath(__file__)
+    contents = '\n'.join(out)
+    logging.info("Processing crontab contents")
+    if runnerFile in contents:
+        logging.info("Script ( " + runnerFile + " ) already installed, nothing to do")
+    else:
+        contents += "\n@daily python " + runnerFilePath + "\n"
+        tmpFile = "/tmp/snapraid-runner.tmpRfgyU"
+        afile = open(tmpFile,"w")
+        afile.write(contents)
+        afile.close()
+        logging.info("Installing new crontab")
+        execute_command("crontab",[tmpFile])
+
+    logging.info("=" * 60)
+    logging.info("Finished install process...")
     logging.info("=" * 60)
 
+def uninstall():
+    logging.info("=" * 60)
+    logging.info("Starting uninstall process...")
+    logging.info("=" * 60)
+
+    logging.info("Loading current crontab contents")
+    out = execute_command("crontab",["-l"])
+    runnerFile = os.path.basename(__file__)
+    runnerFilePath = os.path.realpath(__file__)
+    contents = '\n'.join(out)
+
+    logging.info("Processing crontab contents")
+    if runnerFile in contents:
+        tmpFile = "/tmp/snapraid-runner.tmpRfgyU"
+        afile = open(tmpFile,"w")
+        for item in out:
+            if runnerFile not in item:
+                afile.write("%s\n" % item)
+        afile.close()
+        logging.info("Installing new crontab")
+        execute_command("crontab",[tmpFile])
+    else:
+        logging.info("Script ( " + runnerFile + " ) not present, nothing to do")
+
+    logging.info("=" * 60)
+    logging.info("Finished uninstall process...")
+    logging.info("=" * 60)
+
+def init():
     if not os.path.isfile(config["snapraid"]["executable"]):
         logging.error("The configured snapraid executable \"{}\" does not "
                       "exist or is not a file".format(
@@ -226,6 +303,24 @@ def run():
         logging.error("Snapraid config does not exist at " +
                       config["snapraid"]["config"])
         finish(False)
+
+    if config["install"]["enabled"]:
+        install()
+        sys.exit(0)
+
+    if config["uninstall"]["enabled"]:
+        uninstall()
+        sys.exit(0)
+
+    """
+       Neither install or uninstall enabled perform run
+    """
+    run()
+
+def run():
+    logging.info("=" * 60)
+    logging.info("Run started")
+    logging.info("=" * 60)
 
     logging.info("Running diff...")
     try:
@@ -272,7 +367,17 @@ def run():
             finish(False)
         logging.info("*" * 60)
 
-    logging.info("All done")
+    """   Perform status check for email """
+    logging.info("Running status...")
+    try:
+        snapraid_command("status")
+    except subprocess.CalledProcessError as e:
+        logging.error(e)
+        finish(False)
+
+    logging.info("=" * 60)
+    logging.info("Run complete")
+    logging.info("=" * 60)
     finish(True)
 
 
