@@ -35,3 +35,9 @@ password =
 enabled = false
 percentage = 12
 older-than = 10
+
+[install]
+; TODO make install process configurable
+
+[uninstall]
+; TODO make uninstall process configurable
