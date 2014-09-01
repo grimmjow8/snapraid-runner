@@ -103,20 +103,33 @@ def send_email(success):
         (" SUCCESS" if success else " ERROR")
     msg["From"] = config["email"]["from"]
     msg["To"] = config["email"]["to"]
-    smtp = {"host": config["smtp"]["host"]}
-    if config["smtp"]["port"]:
-        smtp["port"] = config["smtp"]["port"]
-    if config["smtp"]["ssl"]:
-        server = smtplib.SMTP_SSL(**smtp)
+
+    if config["smtp"]["gmail"]:
+        smtpserver = smtplib.SMTP("smtp.gmail.com",587)
+        smtpserver.ehlo()
+        smtpserver.starttls()
+        smtpserver.ehlo
+        smtpserver.login(config["smtp"]["user"], config["smtp"]["password"])
+        header = 'To:' + msg["To"] + '\n'
+        header = header + 'From: ' + msg["From"] + '\n'
+        header = header + 'Subject:' + msg["Subject"] + '\n'
+        smtpserver.sendmail(msg["From"], msg["To"], header + body)
+        smtpserver.close()
     else:
-        server = smtplib.SMTP(**smtp)
-    if config["smtp"]["user"]:
-        server.login(config["smtp"]["user"], config["smtp"]["password"])
-    server.sendmail(
-        config["email"]["from"],
-        [config["email"]["to"]],
-        msg.as_string())
-    server.quit()
+        smtp = {"host": config["smtp"]["host"]}
+        if config["smtp"]["port"]:
+            smtp["port"] = config["smtp"]["port"]
+        if config["smtp"]["ssl"]:
+            server = smtplib.SMTP_SSL(**smtp)
+        else:
+            server = smtplib.SMTP(**smtp)
+        if config["smtp"]["user"]:
+            server.login(config["smtp"]["user"], config["smtp"]["password"])
+        server.sendmail(
+            config["email"]["from"],
+            [config["email"]["to"]],
+            msg.as_string())
+        server.quit()
 
 
 def finish(is_success):
@@ -153,6 +166,7 @@ def load_config(args):
             config[section][option] = 0
 
     config["smtp"]["ssl"] = (config["smtp"]["ssl"].lower() == "true")
+    config["smtp"]["gmail"] = (config["smtp"]["gmail"].lower() == "true")
     config["scrub"]["enabled"] = (config["scrub"]["enabled"].lower() == "true")
     config["email"]["short"] = (config["email"]["short"].lower() == "true")
 

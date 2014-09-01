@@ -29,6 +29,7 @@ port =
 ssl = false
 user =
 password =
+gmail = false
 
 [scrub]
 ; set to true to run scrub after sync
